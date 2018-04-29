@@ -7,6 +7,7 @@ class SoftQLearning(object):
             self,
             env,
             policy,
+            q_function,
             render=True,
             batch_size=32,
             n_epochs=200,
@@ -19,6 +20,7 @@ class SoftQLearning(object):
     ):
         self.env = env
         self.policy = policy
+        self.qf = q_function
         self.render = render
 
         self.batch_size = batch_size
@@ -71,6 +73,12 @@ class SoftQLearning(object):
                     self.do_training(itr, batch)
 
                 itr += 0
+
+    def _create_qf_update_op(self):
+        pass
+
+    def _create_policy_update_op(self):
+        pass
 
     def _do_training(self, itr, batch):
         pass
