@@ -35,12 +35,13 @@ class NNQFunction(object):
 
         return tf.get_default_session().run(self._output, feeds)
 
-    def get_internal_params(self):
-
-        scope = self._scope_name
-        # Append a / if not empty
-        scope = scope if scope == '' else scope + '/'
+    def get_internal_params(self, scope=''):
+        # append internal scope
+        scope += '/' + self._scope_name if scope else self._scope_name
         return tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope)
 
     def eval(self, observations, actions):
         return self._eval((observations, actions))
+
+    def output_for(self, observations, actions, reuse=False):
+        return self._output_for((observations, actions), reuse=reuse)
