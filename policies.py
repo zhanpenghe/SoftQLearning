@@ -6,15 +6,16 @@ class StochasticNNPolicy(object):
     
     def __init__(
             self,
-            env_spec,
+            action_dim,
+            observation_dim,
             hidden_layer_sizes,
             squash=True,
             name='policy'
     ):
         super(StochasticNNPolicy, self).__init__()
 
-        self._action_dim = env_spec.action_space.flat_dim
-        self._observation_dim = env_spec.observation_space.flat_dim
+        self._action_dim = action_dim
+        self._observation_dim = observation_dim
         self._layer_sizes = list(hidden_layer_sizes) + [self._action_dim]
         self._squash = squash
         self._name = name
@@ -29,9 +30,9 @@ class StochasticNNPolicy(object):
         )
 
         # Create get_action_op
-        self._actions = self.action_for
+        self._actions = self.actions_for(self._observation_ph)
 
-    def action_for(self, observations, n_action_samples=1, reuse=False):
+    def actions_for(self, observations, n_action_samples=1, reuse=False):
 
         n_observations = tf.shape(observations)[0]
 

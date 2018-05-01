@@ -4,13 +4,14 @@ from nn import feedforward_net
 
 class NNQFunction(object):
     def __init__(self,
-                 env_spec,
+                 observation_dim,
+                 action_dim,
                  hidden_layer_sizes=(100, 100),
                  name='q_function'):
         super(NNQFunction, self).__init__()
 
-        self._action_dim = env_spec.action_space.flat_dim
-        self._observation_dim = env_spec.observation_space.flat_dim
+        self._action_dim = action_dim
+        self._observation_dim = observation_dim
         self._layer_sizes = list(hidden_layer_sizes) + [1]
         self._name = name
 

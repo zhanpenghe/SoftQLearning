@@ -1,7 +1,7 @@
 import numpy as np
 import tensorflow as tf
-from .utils import SimpleReplayBuffer as ReplayPool
-from .kernel import adaptive_isotropic_gaussian_kernel as default_kernel
+from utils import SimpleReplayBuffer as ReplayPool
+from kernel import adaptive_isotropic_gaussian_kernel as default_kernel
 
 
 class SoftQLearning(object):
@@ -11,7 +11,10 @@ class SoftQLearning(object):
             env,
             policy,
             q_function,
+            action_dim,
+            observation_dim,
             render=True,
+            gamma=0.99,
             batch_size=32,
             n_epochs=200,
             epoch_length=1000,
@@ -40,13 +43,17 @@ class SoftQLearning(object):
         self._n_action_samples_policy = n_action_samples_policy
         self._policy_update_ratio = policy_update_ratio
 
-        self.policy_lr = policy_learning_rate
-        self.qf_lr = q_func_learning_rate
+        self._policy_lr = policy_learning_rate
+        self._qf_lr = q_func_learning_rate
 
         self._target_update_interval = target_update_interval
 
         self.es = None
         self._reward_scale = 1
+        self._discount = gamma
+
+        self._action_dim = action_dim
+        self._observation_dim = observation_dim
 
         self._kernel_fn = kernel_fn
 
@@ -56,7 +63,8 @@ class SoftQLearning(object):
         self._create_policy_update_op()
         self._create_target_ops()
 
-        self._sess = tf.get_default_session()
+        self._sess = tf.Session()
+        self._sess.__enter__()
         self._sess.run(tf.global_variables_initializer())
 
     def _create_placeholders(self):
@@ -73,13 +81,13 @@ class SoftQLearning(object):
         self._actions_ph = tf.placeholder(tf.float32, shape=[None, self._action_dim], name='actions')
         self._next_actions_ph = tf.placeholder(tf.float32, shape=[None, self._action_dim], name='next_actions')
         self._rewards_ph = tf.placeholder(tf.float32, shape=[None], name='rewards')
-        self._terminals_pl = tf.placeholder(tf.float32, shape=[None], name='terminals')
+        self._terminals_ph = tf.placeholder(tf.float32, shape=[None], name='terminals')
 
     def train(self):
         pool = ReplayPool(
             max_pool_size=self.replay_pool_size,
-            observation_dim=self.env.observation_space.flat_dim,
-            action_dim=self.env.action_space.flat_dim
+            observation_dim=self._observation_dim,
+            action_dim=self._action_dim
         )
 
         terminal = False
@@ -93,15 +101,19 @@ class SoftQLearning(object):
             for epoch_itr in range(self.epoch_length):
 
                 if terminal:
+                    print(path_return, path_length)
                     observation = self.env.reset()
                     path_length = 0
+                    path_return = 0
+                # if self.render:
+                #     self.env.render()
 
-                action = self.es.get_action(itr, observation, policy=self.policy)
+                action = self.policy.get_action(observation)
                 next_observation, reward, terminal, _ = self.env.step(action)
                 path_length += 1
-                path_return += 1
+                path_return += reward
 
-                if not terminal and path_length >= self.max_path_length:
+                if not terminal and path_length >= self.epoch_length:
                     terminal = True
 
                 pool.add_sample(observation, action, reward, terminal)
@@ -109,7 +121,7 @@ class SoftQLearning(object):
 
                 if pool.size >= self.min_pool_size:
                     batch = pool.random_batch(self.batch_size)
-                    self.do_training(itr, batch)
+                    self._do_training(itr, batch)
 
                 itr += 0
 
@@ -118,18 +130,18 @@ class SoftQLearning(object):
         with tf.variable_scope('q_target'):
             target_actions = tf.random_uniform(
                 shape=(1, self._n_action_samples_qf, self._action_dim),
-                min=-1,
-                max=1,
+                minval=-1,
+                maxval=1,
             )
             q_value_targets = self.qf.output_for(
                 observations=self._next_observations_ph[:, None, :],
                 actions=target_actions
             )
 
-        self._q_values = self.qf.output_for(self._observations_ph, self.action_ph, reuse=True)
+        self._q_values = self.qf.output_for(self._observations_ph, self._actions_ph, reuse=True)
         next_value = tf.reduce_logsumexp(q_value_targets, axis=1)
 
-        next_value -= tf.log(tf.cast(self._value_n_particles, tf.float32))
+        next_value -= tf.log(tf.cast(self._n_action_samples_qf, tf.float32))
         next_value += self._action_dim * np.log(2)
 
         ys = tf.stop_gradient(self._reward_scale * self._rewards_ph + (1 - self._terminals_ph) * self._discount * next_value)
@@ -189,8 +201,8 @@ class SoftQLearning(object):
 
     def _create_target_ops(self):
 
-        source_params = self.qf.get_params_internal()
-        target_params = self.qf.get_params_internal(scope='target')
+        source_params = self.qf.get_internal_params()
+        target_params = self.qf.get_internal_params(scope='target')
 
         self._target_ops = [
             tf.assign(tgt, src)
@@ -204,7 +216,7 @@ class SoftQLearning(object):
             self._actions_ph: batch['actions'],
             self._next_observations_ph: batch['next_observations'],
             self._rewards_ph: batch['rewards'],
-            self._terminals_pl: batch['terminals'],
+            self._terminals_ph: batch['terminals'],
         }
 
         self._sess.run(self._training_ops, feeds)

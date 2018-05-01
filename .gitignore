@@ -3,3 +3,6 @@ venv/
 
 # Pycharm
 .idea
+
+# Python
+__pycache__/
